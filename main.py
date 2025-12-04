@@ -126,7 +126,8 @@ if mode == "Enrollment":
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         
         try:
-            emb = DeepFace.represent(img, model_name=MODEL_NAME)[0]["embedding"]
+            emb = DeepFace.represent(img, model_name=MODEL_NAME,detector_backend="retinaface",  # <--- The Fix
+                    enforce_detection=True)[0]["embedding"]
             save_face(name, img, emb)
             st.success(f"User {name} registered successfully!")
         except ValueError:

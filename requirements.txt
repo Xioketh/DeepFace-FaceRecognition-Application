@@ -10,3 +10,4 @@ faiss-cpu
 streamlit-webrtc
 opencv-python-headless
 av
+retina-face
