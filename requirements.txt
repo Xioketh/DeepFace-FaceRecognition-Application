@@ -1,0 +1,10 @@
+streamlit
+deepface
+opencv-python
+pandas
+numpy
+scipy
+tensorflow==2.15.0
+tf-keras
+faiss-cpu 
+streamlit-webrtc
