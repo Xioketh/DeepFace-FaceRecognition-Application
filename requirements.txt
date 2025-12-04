@@ -1,6 +1,6 @@
 streamlit
 deepface
-opencv-python
+# opencv-python
 pandas
 numpy
 scipy
@@ -8,3 +8,5 @@ tensorflow==2.15.0
 tf-keras
 faiss-cpu 
 streamlit-webrtc
+opencv-python-headless
+av
