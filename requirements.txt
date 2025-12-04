@@ -14,4 +14,4 @@ retina-face
 twilio
 python-dotenv
 
-mediapipe
+mediapipe==0.10.8
