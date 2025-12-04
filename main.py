@@ -5,13 +5,18 @@ import faiss
 import pickle
 import os
 from deepface import DeepFace
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
-import av
+from streamlit_webrtc import WebRtcMode, webrtc_streamer, VideoTransformerBase
+from twilio.rest import Client
+from dotenv import load_dotenv
 
 # --- CONFIGURATION ---
 DB_PATH = "db"
 MODEL_NAME = "ArcFace"  # Switching to ArcFace for better accuracy (Vector Size: 512)
 DISTANCE_METRIC = "cosine"
+
+load_dotenv()
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 
 # FAISS requires knowing the vector dimension beforehand
 # ArcFace = 512, VGG-Face = 2622, FaceNet = 128
@@ -19,6 +24,20 @@ VECTOR_DIMENSION = 512
 
 if not os.path.exists(DB_PATH):
     os.makedirs(DB_PATH)
+
+def get_ice_servers():
+    """
+    Fetches the TURN server credentials from Twilio.
+    This solves the 'Connection taking too long' error on mobile.
+    """
+    try:
+        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        token = client.tokens.create()
+        return token.ice_servers
+    except Exception as e:
+        st.warning(f"Could not fetch TURN servers: {e}. Falling back to STUN (might fail on mobile).")
+        # Fallback to Google's STUN if Twilio fails
+        return [{"urls": ["stun:stun.l.google.com:19302"]}]
 
 # --- FAISS CORE ---
 def init_faiss_index():
@@ -138,10 +157,14 @@ if mode == "Enrollment":
 elif mode == "Real-Time Recognition":
     st.header("Live Feed")
     st.info("Processing runs every ~1 second to maintain FPS.")
+    ice_servers = get_ice_servers()
     
     # The WebRTC Magic
     webrtc_streamer(
         key="realtime-face",
         video_processor_factory=FaceRecognitionProcessor,
-        media_stream_constraints={"video": True, "audio": False}
+        mode=WebRtcMode.SENDRECV,
+        rtc_configuration={"iceServers": ice_servers},
+        media_stream_constraints={"video": True, "audio": False},
+        async_processing=True,
     )
