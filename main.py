@@ -9,6 +9,7 @@ from deepface import DeepFace
 from streamlit_webrtc import WebRtcMode, webrtc_streamer, VideoTransformerBase
 import av
 from dotenv import load_dotenv
+from twilio.rest import Client
 
 # --- CONFIGURATION ---
 DB_PATH = "db"
