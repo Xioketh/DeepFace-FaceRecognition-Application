@@ -8,7 +8,9 @@ tensorflow==2.15.0
 tf-keras
 faiss-cpu 
 streamlit-webrtc
-opencv-python-headless
+# opencv-python-headless
+opencv-python-headless==4.7.0.72
+
 av
 retina-face
 twilio
