@@ -13,3 +13,5 @@ av
 retina-face
 twilio
 python-dotenv
+
+mediapipe

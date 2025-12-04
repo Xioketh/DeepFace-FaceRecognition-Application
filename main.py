@@ -1,3 +1,4 @@
+import time
 import streamlit as st
 import cv2
 import numpy as np
@@ -6,7 +7,7 @@ import pickle
 import os
 from deepface import DeepFace
 from streamlit_webrtc import WebRtcMode, webrtc_streamer, VideoTransformerBase
-from twilio.rest import Client
+import av
 from dotenv import load_dotenv
 
 # --- CONFIGURATION ---
@@ -24,20 +25,6 @@ VECTOR_DIMENSION = 512
 
 if not os.path.exists(DB_PATH):
     os.makedirs(DB_PATH)
-
-def get_ice_servers():
-    """
-    Fetches the TURN server credentials from Twilio.
-    This solves the 'Connection taking too long' error on mobile.
-    """
-    try:
-        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-        token = client.tokens.create()
-        return token.ice_servers
-    except Exception as e:
-        st.warning(f"Could not fetch TURN servers: {e}. Falling back to STUN (might fail on mobile).")
-        # Fallback to Google's STUN if Twilio fails
-        return [{"urls": ["stun:stun.l.google.com:19302"]}]
 
 # --- FAISS CORE ---
 def init_faiss_index():
@@ -78,27 +65,50 @@ def save_face(name, image_array, embedding):
     with open(vector_path, "wb") as f:
         pickle.dump(embedding, f)
 
+def get_ice_servers():
+    """
+    Fetches the TURN server credentials from Twilio.
+    This solves the 'Connection taking too long' error on mobile.
+    """
+    try:
+        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        token = client.tokens.create()
+        return token.ice_servers
+    except Exception as e:
+        st.warning(f"Could not fetch TURN servers: {e}. Falling back to STUN (might fail on mobile).")
+        # Fallback to Google's STUN if Twilio fails
+        return [{"urls": ["stun:stun.l.google.com:19302"]}]
+
 # --- REAL-TIME PROCESSING CLASS ---
 class FaceRecognitionProcessor(VideoTransformerBase):
     def __init__(self):
         self.frame_count = 0
         self.detected_name = "Scanning..."
-        # Load index once at startup
         self.index, self.names = init_faiss_index()
 
+        self.last_time = time.time()
+        self.fps_check = 0
+
     def transform(self, frame):
-        # Convert frame to numpy array
         img = frame.to_ndarray(format="bgr24")
+
+        current_time = time.time()
         
         # Optimization: Only run recognition every 30 frames (approx 1 sec)
         # Running it every frame will lag the video heavily on CPU
         if self.frame_count % 30 == 0:
+
+            time_diff = current_time - self.last_time
+            print(f"Time for 30 frames: {time_diff:.4f} sec")
+            self.last_time = current_time
+
             try:
                 # 1. Detect & Embed
                 embedding_objs = DeepFace.represent(
                     img_path=img,
                     model_name=MODEL_NAME,
-                    enforce_detection=False # Don't crash if no face
+                    detector_backend="mediapipe",
+                    enforce_detection=True
                 )
                 
                 if embedding_objs:
@@ -112,21 +122,29 @@ class FaceRecognitionProcessor(VideoTransformerBase):
                         
                         best_idx = indices[0][0]
                         best_dist = distances[0][0]
+
+                        print('best_dist::::', best_dist)
                         
-                        # Thresholding (Adjust based on model/metric)
-                        # ArcFace L2 distance < 10 is usually a good match guess
-                        if best_dist < 100: 
+                        if best_dist < 250: 
                              self.detected_name = f"{self.names[best_idx]} ({int(best_dist)})"
                         else:
-                            self.detected_name = "Unknown"
+                            self.detected_name = "Unknown User"
+            except ValueError:
+                self.detected_name = "No Face Found"
+                
             except Exception as e:
-                pass # Ignore errors to keep video smooth
+                print(f"Error: {e}")
 
         self.frame_count += 1
+
+
+        cv2.putText(img, f"Frame: {self.frame_count}", (10, 30), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+
+        color = (0, 255, 0) if "No Face" not in self.detected_name and "Unknown" not in self.detected_name else (0, 0, 255)
         
-        # Draw the result on the frame
-        cv2.putText(img, self.detected_name, (50, 50), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(img, self.detected_name, (50, 80), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
         
         return img
 
@@ -157,6 +175,14 @@ if mode == "Enrollment":
 elif mode == "Real-Time Recognition":
     st.header("Live Feed")
     st.info("Processing runs every ~1 second to maintain FPS.")
+    
+    # The WebRTC Magic
+    # webrtc_streamer(
+    #     key="realtime-face",
+    #     video_processor_factory=FaceRecognitionProcessor,
+    #     media_stream_constraints={"video": True, "audio": False}
+    # )
+
     ice_servers = get_ice_servers()
     
     # The WebRTC Magic
