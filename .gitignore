@@ -3,3 +3,7 @@ venv311
 /venv311
 db
 .env
+venv
+./venv
+/venv
+__pycache__/
